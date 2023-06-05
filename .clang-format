@@ -1,0 +1,8 @@
+Language: Cpp
+IndentWidth: 4
+SpaceAfterCStyleCast: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterStruct: false
+AllowShortFunctionsOnASingleLine: false
+SpacesBeforeTrailingComments: 2
