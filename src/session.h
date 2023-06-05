@@ -3,6 +3,7 @@
 
 typedef struct Session {
     int conn;
+    int command_pid;
     int command_infd;
     int command_outfd; 
 } Session;

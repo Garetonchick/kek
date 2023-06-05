@@ -12,8 +12,12 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/epoll.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <bits/types/sigset_t.h>
 
 typedef struct ConnectionInfo {
     int conn;
@@ -148,19 +152,60 @@ void RunServer(int listener) {
     }
 }
 
+void SigchldHandler(int sig, siginfo_t* info, void* ucontext) {
+    (void)sig; (void)ucontext; (void)info;
+    Logf("Recieved sigchld\n");
+    waitpid(info->si_pid, NULL, 0);
+}
+
+bool InitSignals() {
+    sigset_t banned_sigs;
+    sigfillset(&banned_sigs);
+    sigdelset(&banned_sigs, SIGCHLD);
+    sigdelset(&banned_sigs, SIGTERM);
+
+    if(sigprocmask(SIG_BLOCK, &banned_sigs, NULL) < 0) {
+        return false;
+    }
+
+    struct sigaction sigchld = {
+        .sa_flags = SA_RESTART | SA_SIGINFO,
+        .sa_sigaction = SigchldHandler
+    };
+
+    if(sigaction(SIGCHLD, &sigchld, NULL) < 0) {
+        return false;
+    } 
+
+    return true;
+}
+
+bool Init() {
+    if(!InitSignals()) {
+        fprintf(stderr, "Failed to init signals\n");
+        return false;
+    }
+
+    if(!InitLogger("slog.txt")) {
+        fprintf(stderr, "Failed to start logger\n");
+        return false;
+    }
+
+    if(daemon(1, 0) < 0) {
+        fprintf(stderr, "Failed to start daemon\n");
+        return false;
+    }
+
+    return true;
+}
+
 int main(int argc, char** args) {
     if(argc != 2) {
         PrintHelpMessage();
         return 0;
     }
 
-    if(!InitLogger("slog.txt")) {
-        fprintf(stderr, "Failed to start logger\n");
-        return 1;
-    }
-
-    if(daemon(1, 0) < 0) {
-        fprintf(stderr, "Failed to start daemon\n");
+    if(!Init()) {
         return 1;
     }
 

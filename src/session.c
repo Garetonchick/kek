@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void Exec(const char* command) {
+static void Exec(const char* command) {
     char* copy = strdup(command); 
     char* cur = copy;
     int cnt = 0;
@@ -24,6 +24,7 @@ void Exec(const char* command) {
     char** args = calloc(cnt + 1, sizeof(char*));
     args[0] = copy; 
     int idx = 1;
+    cur = copy;
 
     while(*cur) {
         if(*cur == ' ') {
@@ -33,10 +34,14 @@ void Exec(const char* command) {
         ++cur;
     }
 
+    for(int i = 0; i < idx; ++i) {
+        Logf("args[%d]=%s\n", i, args[i]);
+    }
+
     execvp(args[0], args);
 }
 
-static bool StartCommand(const char* command, int* infd, int* outfd) {
+static int StartCommand(const char* command, int* infd, int* outfd) {
     int to_child[2];
     int to_batya[2];
 
@@ -51,13 +56,13 @@ static bool StartCommand(const char* command, int* infd, int* outfd) {
     int pid = fork();
 
     if(pid < 0) {
-        return false;
+        return -1;
     } else if(pid == 0) {
         Exec(command);
         _exit(1);
     }
 
-    return true;
+    return pid;
 }
 
 bool CreateSession(int epollfd, int conn) {
