@@ -1,9 +1,9 @@
 #include "connection.h"
 
-#include "epoll_utils.h"
 #include "logger.h"
 #include "protocol.h"
 #include "session.h"
+#include "events.h"
 
 #define _GNU_SOURCE
 #include <stdio.h>
@@ -18,12 +18,6 @@
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <bits/types/sigset_t.h>
-
-typedef struct ConnectionInfo {
-    int conn;
-    int infd;
-    int outfd; 
-} ConnectionInfo;
 
 void PrintHelpMessage() {
     const char* message = "Usage: server <port>";
@@ -63,92 +57,95 @@ bool ProcessKDU(Session* sus, KDU* kdu) {
     return true;
 }
 
-bool HandleClientInput(int epollfd, Session* sus) {
+void HandleClientInputEvent(Event* e) {
     KDU kdu;
 
-    if(!RecieveKDU(sus->conn, &kdu)) {
-        ShutdownSession(epollfd, sus);
-        return false;
+    if(!RecieveKDU(e->fd, &kdu)) {
+        ShutdownSession(DelEvent(e));
+        return;
     }
 
-    if(!ProcessKDU(sus, &kdu)) {
+    if(!ProcessKDU(e->sus, &kdu)) {
         Logf("Failed to process KDU\n");
         FreeKDU(&kdu);
-        ShutdownSession(epollfd, sus);
-        return false;
+        ShutdownSession(DelEvent(e));
+        return;
     } 
 
     FreeKDU(&kdu);
-    return true;
 }
 
-bool HandleCommandInput(int epollfd, Session* sus) {
-    (void)epollfd;
+void HandleCommandInputEvent(Event* e) {
     static char buf[KDU_MAX_DATA_SIZE];
     int bytes_read = 0;
 
-    if ((bytes_read = read(sus->command_infd, buf, sizeof(buf))) <= 0) {
-        return false;
+    if ((bytes_read = read(e->sus->command_infd, buf, sizeof(buf))) <= 0) {
+        ShutdownSession(DelEvent(e));
+        return;
     }
 
-    if(!SendKDU5(sus->conn, KEKS_COMMAND_OUTPUT, bytes_read, buf)) {
-        return false; 
+    if(!SendKDU5(e->sus->conn, KEKS_COMMAND_OUTPUT, bytes_read, buf)) {
+        ShutdownSession(DelEvent(e));
+        return;
     }
-
-    return true;
 }
 
-bool HandleEvent(int epollfd, int listener, Session* sus, int efd, uint32_t evt) {
-    if(evt != EPOLLIN) {
+void HandleNewConnectionEvent(Event* e) {
+    Logf("Handle new connection event\n");
+    int conn = accept(e->fd, NULL, NULL);
+    Logf("Accepted connection\n");
+
+    if(!CreateSession(conn)) {
+        Logf("Create session failed\n");
+    }
+}
+
+void HandleCommandEndEvent(Event* e) {
+    ShutdownSession(DelEvent(e));   
+}
+
+void HandleEvent(Event* e) {
+    if(e->flags != EPOLLIN) {
         Logf("Error epoll event\n");
-        return false;
+        ShutdownSession(DelEvent(e));
+        return;
     }
 
-    if(efd == listener) {
-        Logf("Handle accept event\n");
-        int conn = accept(listener, NULL, NULL);
-        Logf("Accepted connection\n");
+    switch(e->type) {
+        case NEW_CONNECTION:
+            HandleNewConnectionEvent(e);        
+            break;
+        
+        case CLIENT_INPUT:
+            HandleClientInputEvent(e);
+            break;
 
-        if(!CreateSession(epollfd, conn)) {
-            Logf("Create session failed\n");
-            return false;
-        }
-    } else if(efd == sus->conn) {
-        Logf("Handle client input event\n");
-        if(!HandleClientInput(epollfd, sus)) {
-            return false;
-        }
-    } else if(efd == sus->command_infd) {
-        Logf("Handle command input event\n");
-        if(!HandleCommandInput(epollfd, sus)) {
-            return false;
-        }
-    } else {
-        assert(false && "how");
+        case COMMAND_INPUT:
+            HandleCommandInputEvent(e);
+            break;
+
+        case COMMAND_END:
+            HandleCommandEndEvent(e);
+            break;
+
+        default:
+            assert(false && "Met unknown event type");
+            break;
     }
-
-    Logf("Sussessfuly leave handle event\n");
-    return true;
 }
 
 void RunServer(int listener) {
-    int epollfd = epoll_create1(0);
-    AddEpollEvent(epollfd, listener, NULL, EPOLLIN);
+    AddEvent(NULL, listener, EPOLLIN, NEW_CONNECTION, NULL);
 
     while(true) {
-        Session* sus;
-        int efd;
-        uint32_t evt = EPOLLIN;
+        Event* e;
 
-        if(!WaitEpollEvent(epollfd, (void**)&sus, &efd, &evt)) {
+        if((e = WaitEvent(EPOLLIN)) == NULL) {
             Logf("Wait epoll failed\n");
-            return;
+            continue;
         }
 
-        if(!HandleEvent(epollfd, listener, sus, efd, evt)) {
-            Logf("Handle event failed\n");
-            return;
-        }
+        HandleEvent(e);
     }
 }
 
@@ -188,6 +185,11 @@ bool Init() {
 
     if(!InitLogger("slog.txt")) {
         fprintf(stderr, "Failed to start logger\n");
+        return false;
+    }
+
+    if(!InitEventSystem()) {
+        fprintf(stderr, "Failed to init event system\n");
         return false;
     }
 

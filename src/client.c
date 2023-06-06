@@ -59,8 +59,8 @@ bool HandleUserInput(int epollfd, int conn) {
 
 void HandleEvents(int conn, char** args) {
     int epollfd = epoll_create1(0);
-    AddEpollEvent(epollfd, conn, NULL, EPOLLIN);
-    AddEpollEvent(epollfd, STDIN_FILENO, NULL, EPOLLIN);
+    AddEpollEvent3(epollfd, conn, EPOLLIN);
+    AddEpollEvent3(epollfd, STDIN_FILENO, EPOLLIN);
 
     if(!SendCommandKDU(conn, *args, args + 1)) {
         printf("Connection closed\n");
@@ -71,7 +71,7 @@ void HandleEvents(int conn, char** args) {
         int efd;
         uint32_t evt = EPOLLIN;
 
-        if(!WaitEpollEvent(epollfd, NULL, &efd, &evt)) {
+        if(!WaitEpollEventFD(epollfd, &efd, &evt)) {
             return;
         }
 

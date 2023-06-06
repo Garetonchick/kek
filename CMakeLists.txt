@@ -29,7 +29,9 @@ add_executable(client src/client.c
 add_executable(server src/server.c 
     src/logger.c
     src/session.c
+    src/events.c
     src/epoll_utils.c
+    src/io.c
 )
 
 # Link lib
