@@ -8,6 +8,7 @@ typedef struct Session {
     int waiter_pid;
     int command_pid;
     int command_infd;
+    int command_err_infd;
     int command_outfd; 
     int refcnt;
 } Session;

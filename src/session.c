@@ -38,14 +38,16 @@ static void Exec(const char* command) {
         ++cur;
     }
 
-    for(int i = 0; i < idx; ++i) {
-        Logf("args[%d]=%s\n", i, args[i]);
-    }
-
     execvp(args[0], args);
 }
 
 static void ExecAndNotifyEnd(const char* command, int notify_fd) {
+    for (int fd = 3; fd < 256; ++fd) {
+        if(fd != notify_fd) {
+            (void)close(fd);
+        }
+    }
+
     int pid = fork();
 
     if(pid < 0) {
@@ -66,6 +68,7 @@ static void ExecAndNotifyEnd(const char* command, int notify_fd) {
 static bool StartCommand(Session* sus, const char* command) {
     int to_child[2];
     int to_batya[2];
+    int to_batya_err[2];
     int notify_end[2];
 
     pipe(to_child);
@@ -74,7 +77,9 @@ static bool StartCommand(Session* sus, const char* command) {
 
     dup2(to_child[0], STDIN_FILENO); 
     dup2(to_batya[1], STDOUT_FILENO); 
+    dup2(to_batya_err[1], STDERR_FILENO); 
     sus->command_infd = to_batya[0];
+    sus->command_err_infd = to_batya_err[0];
     sus->command_outfd = to_child[1];
 
     AddEvent(sus, notify_end[0], EPOLLIN, COMMAND_END, NULL);
@@ -126,6 +131,7 @@ bool CreateSession(int conn) {
     Logf("After start command\n");
     FreeKDU(&kdu);
     AddEvent(sus, sus->command_infd, EPOLLIN, COMMAND_INPUT, NULL);
+    AddEvent(sus, sus->command_err_infd, EPOLLIN, COMMAND_INPUT, NULL);
 
     return true;
 }
@@ -133,6 +139,7 @@ bool CreateSession(int conn) {
 void ShutdownSession(Session* sus) {
     if(sus->conn != SESSION_CLOSING) {
         close(sus->command_infd);
+        close(sus->command_err_infd);
         close(sus->command_outfd);
         close(sus->conn);
         kill(sus->command_pid, SIGTERM);

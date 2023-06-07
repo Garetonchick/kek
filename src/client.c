@@ -8,8 +8,6 @@
 #include <sys/epoll.h>
 #include <unistd.h>
 
-#define SERVER_PORT "444444"
-
 void PrintHelpMessage() {
     const char* message = "Usage: client <host> spawn <command> [args...]";
     printf("%s\n", message);
@@ -20,8 +18,11 @@ void PrintUnknownClientCommandMessage(const char* command) {
     printf(message, command);
 }
 
-bool HandleServerInput(int epollfd, int conn) {
-    (void)epollfd;
+bool HandleServerInput(int conn, uint32_t evt) {
+    if(evt != EPOLLIN) {
+        return false;
+    }
+
     KDU kdu;
 
     if(!RecieveKDU(conn, &kdu)) {
@@ -38,19 +39,25 @@ bool HandleServerInput(int epollfd, int conn) {
     return true;
 }
 
-bool HandleUserInput(int epollfd, int conn) {
-    (void)epollfd;
+bool SendEOI(int conn) {
+    return SendKDU5(conn, KEKC_USER_EOI, 0, NULL);
+}
+
+bool HandleUserInput(int conn, uint32_t evt) {
+    if(evt != EPOLLIN) {
+        Logf("Recieved end of input\n");
+        return SendEOI(conn);
+    }
+
     static char rdbuf[KDU_MAX_DATA_SIZE];
     int bytes_read = 0;
 
     if((bytes_read = read(STDIN_FILENO, rdbuf, KDU_MAX_DATA_SIZE)) <= 0) {
-        return false;
+        return SendEOI(conn);
     }
-    printf("bytes_read = %d\n", bytes_read);
-    fflush(stdout);
 
     if(!SendKDU5(conn, KEKC_USER_INPUT, bytes_read, rdbuf)) {
-        printf("Connection closed\n");
+        Logf("Connection closed\n");
         return false;
     }
 
@@ -59,43 +66,38 @@ bool HandleUserInput(int epollfd, int conn) {
 
 void HandleEvents(int conn, char** args) {
     int epollfd = epoll_create1(0);
-    AddEpollEvent3(epollfd, conn, EPOLLIN);
-    AddEpollEvent3(epollfd, STDIN_FILENO, EPOLLIN);
+    AddEpollEvent3(epollfd, conn, EPOLLIN | EPOLLERR | EPOLLRDHUP);
+    AddEpollEvent3(epollfd, STDIN_FILENO, EPOLLIN | EPOLLERR | EPOLLRDHUP);
 
     if(!SendCommandKDU(conn, *args, args + 1)) {
-        printf("Connection closed\n");
+        Logf("Connection closed\n");
         return;
     }
 
     while(true) {
         int efd;
-        uint32_t evt = EPOLLIN;
+        uint32_t evt = EPOLLIN | EPOLLERR | EPOLLRDHUP;
 
         if(!WaitEpollEventFD(epollfd, &efd, &evt)) {
-            return;
+            Logf("Epoll wait failed\n");
+            continue;
         }
 
-        if(evt != EPOLLIN) {
-            Logf("Error epoll event\n");
-            return;
-        }
 
         if(efd == conn) {
-            if(!HandleServerInput(epollfd, conn)) {
+            if(!HandleServerInput(conn, evt)) {
                 return;
             }
         } else {
-            printf("Handle user input\n");
-            fflush(stdout);
-            if(!HandleUserInput(epollfd, conn)) {
+            if(!HandleUserInput(conn, evt)) {
                 return;
             }
         }
     }
 }
 
-void HandleSpawn(char** args, const char* host) {
-    int conn = CreateConnection(host, SERVER_PORT);
+void HandleSpawn(char** args, const char* host, const char* port) {
+    int conn = CreateConnection(host, port);
 
     if(conn < 0) {
         fprintf(stderr, "Couldn't connect to server\n");
@@ -117,10 +119,11 @@ int main(int argc, char** args) {
     }
 
     const char* host = args[1];
-    const char* client_command = args[2];
+    const char* port = args[2];
+    const char* client_command = args[3];
 
     if(strcmp(client_command, "spawn") == 0) {
-        HandleSpawn(args + 3, host);        
+        HandleSpawn(args + 4, host, port);        
     } else {
         PrintUnknownClientCommandMessage(client_command);
         return 1;

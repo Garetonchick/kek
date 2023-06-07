@@ -24,31 +24,15 @@ void PrintHelpMessage() {
     printf("%s\n", message);
 }
 
-bool StartCommand(const char* command, int* infd, int* outfd) {
-    int to_child[2];
-    int to_batya[2];
-
-    pipe(to_child);
-    pipe(to_batya);
-
-    dup2(to_child[0], STDIN_FILENO); 
-    dup2(to_batya[1], STDOUT_FILENO); 
-    *infd = to_batya[0];
-    *outfd = to_child[1];
-
-    if(system(command) < 0) {
-        return false;
-    }
-
-    return true;
-}
-
 bool ProcessKDU(Session* sus, KDU* kdu) {
     if(kdu->type == KEKC_USER_INPUT) {
         if(write(sus->command_outfd, kdu->data, kdu->size) != kdu->size) {
             Logf("Connection closed\n");
             return false;
         }
+    } else if(kdu->type == KEKC_USER_EOI) {
+        Logf("Recieved end of user input\n");
+        /* \_(?_?)_/*/
     } else {
         Logf("Unknown kdu type\n%s\n", SerializeKDU(kdu));
         return false;
@@ -79,7 +63,7 @@ void HandleCommandInputEvent(Event* e) {
     static char buf[KDU_MAX_DATA_SIZE];
     int bytes_read = 0;
 
-    if ((bytes_read = read(e->sus->command_infd, buf, sizeof(buf))) <= 0) {
+    if ((bytes_read = read(e->fd, buf, sizeof(buf))) <= 0) {
         ShutdownSession(DelEvent(e));
         return;
     }
@@ -93,7 +77,13 @@ void HandleCommandInputEvent(Event* e) {
 void HandleNewConnectionEvent(Event* e) {
     Logf("Handle new connection event\n");
     int conn = accept(e->fd, NULL, NULL);
-    Logf("Accepted connection\n");
+
+    if(conn == -1) {
+        Logf("Connection failed\n");
+        return;
+    } else {
+        Logf("Accepted connection\n");
+    }
 
     if(!CreateSession(conn)) {
         Logf("Create session failed\n");
