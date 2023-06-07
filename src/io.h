@@ -3,4 +3,4 @@
 
 bool WriteInt(int fd, int val);
 
-bool ReadInt(int fd, int* val);
+bool ReadInt(int fd, int *val);

@@ -2,9 +2,9 @@
 
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <stdio.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <stdio.h>
 
 int CreateConnection(const char *hostname, const char *port) {
     struct addrinfo *addrinfo = NULL;
@@ -20,7 +20,8 @@ int CreateConnection(const char *hostname, const char *port) {
     int sock = -1;
 
     for (struct addrinfo *ai = addrinfo; ai; ai = ai->ai_next) {
-        sock = socket(ai->ai_family, ai->ai_socktype | SOCK_CLOEXEC, ai->ai_protocol);
+        sock = socket(ai->ai_family, ai->ai_socktype | SOCK_CLOEXEC,
+                      ai->ai_protocol);
 
         if (sock < 0) {
             perror("socket");

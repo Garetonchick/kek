@@ -2,12 +2,12 @@
 
 #include <stdio.h>
 
-static FILE* g_log_file = NULL;
+static FILE *g_log_file = NULL;
 
-bool InitLogger(const char* logname) {
-    g_log_file = fopen(logname, "we"); // are the champions
+bool InitLogger(const char *logname) {
+    g_log_file = fopen(logname, "we");  // are the champions
 
-    if(!g_log_file) {
+    if (!g_log_file) {
         return false;
     }
 
@@ -16,19 +16,19 @@ bool InitLogger(const char* logname) {
 }
 
 void DestroyLogger() {
-    if(g_log_file) {
+    if (g_log_file) {
         fclose(g_log_file);
     }
 }
 
-void Log(const char* format, ...) {
+void Log(const char *format, ...) {
     va_list args;
     va_start(args, format);
     vfprintf(g_log_file, format, args);
     va_end(args);
 }
 
-void Logf(const char* format, ...) {
+void Logf(const char *format, ...) {
     va_list args;
     va_start(args, format);
     vfprintf(g_log_file, format, args);

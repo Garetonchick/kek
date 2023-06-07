@@ -6,7 +6,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Flags 
 list(APPEND KEK_FLAGS
-#    -O3
     -g
     -Wall
     -Wextra
@@ -14,15 +13,15 @@ list(APPEND KEK_FLAGS
 )
 
 # Add lib shared between client and server
-add_library(kek STATIC 
+add_library(kek SHARED 
     src/connection.c 
     src/protocol.c
+    src/epoll_utils.c
 )
 
 # Create client executable
 add_executable(client src/client.c
     src/logger.c
-    src/epoll_utils.c
 )
 
 # Create server executable
@@ -30,7 +29,6 @@ add_executable(server src/server.c
     src/logger.c
     src/session.c
     src/events.c
-    src/epoll_utils.c
     src/io.c
 )
 

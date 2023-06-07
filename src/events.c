@@ -3,8 +3,8 @@
 #include "epoll_utils.h"
 
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/eventfd.h>
+#include <unistd.h>
 
 static int epollfd = -1;
 
@@ -13,10 +13,10 @@ bool InitEventSystem() {
     return epollfd != -1;
 }
 
-bool AddEvent(Session* sus, int efd, int eflags, int etype, void* edata) {
-    Event* e = calloc(1, sizeof(*e));
+bool AddEvent(Session *sus, int efd, int eflags, int etype, void *edata) {
+    Event *e = calloc(1, sizeof(*e));
 
-    if(!e) {
+    if (!e) {
         return false;
     }
 
@@ -26,7 +26,7 @@ bool AddEvent(Session* sus, int efd, int eflags, int etype, void* edata) {
     e->type = etype;
     e->data = edata;
 
-    if(e->sus) {
+    if (e->sus) {
         e->sus->refcnt++;
     }
 
@@ -34,7 +34,7 @@ bool AddEvent(Session* sus, int efd, int eflags, int etype, void* edata) {
     return true;
 }
 
-bool AddNotifier(Session* sus, int etype) {
+bool AddNotifier(Session *sus, int etype) {
     int efd = eventfd(0, EFD_CLOEXEC);
     return efd != -1 && AddEvent(sus, efd, EPOLLIN, etype, NULL);
 }
@@ -44,9 +44,9 @@ bool Notify(int notify_fd) {
     return write(notify_fd, buf, sizeof(buf)) == sizeof(buf);
 }
 
-Event* WaitEvent(uint32_t eflags) {
-    Event* e;
-    if(WaitEpollEventData(epollfd, (void**)&e, &eflags) <= 0) {
+Event *WaitEvent(uint32_t eflags) {
+    Event *e;
+    if (WaitEpollEventData(epollfd, (void **)&e, &eflags) <= 0) {
         return NULL;
     }
     e->flags = eflags;
@@ -54,8 +54,8 @@ Event* WaitEvent(uint32_t eflags) {
     return e;
 }
 
-Session* DelEvent(Event* e) {
-    Session* sus = e->sus;
+Session *DelEvent(Event *e) {
+    Session *sus = e->sus;
     DelEpollEvent(epollfd, e->fd);
     e->sus->refcnt--;
     free(e->data);

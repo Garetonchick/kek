@@ -9,9 +9,9 @@ typedef struct Session {
     int command_pid;
     int command_infd;
     int command_err_infd;
-    int command_outfd; 
+    int command_outfd;
     int refcnt;
 } Session;
 
 bool CreateSession(int conn);
-void ShutdownSession(Session* sus);
+void ShutdownSession(Session *sus);
